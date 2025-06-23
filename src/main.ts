@@ -1,15 +1,15 @@
 class WebSocketManager {
-	private static WEBSOCKET_MANAGER_SETTINGS = "WEBSOCKET_MANAGER_SETTINGS" + window.location.host;
-	private socket!: WebSocket;
-	private settings!: WebSocketManagerSettings;
+	static #WEBSOCKET_MANAGER_SETTINGS = "WEBSOCKET_MANAGER_SETTINGS" + window.location.host;
+	#socket!: WebSocket;
+	#settings!: WebSocketManagerSettings;
 	constructor(settings?: object) {
 		const existingInstance = this.#checkForExistingInstance();
 		if (existingInstance) {
 			console.warn("WebSocketManager instance already exists. Using the existing instance.");
 			return existingInstance; // Return the existing instance if it exists
 		}
-		this.settings = settings || JSON.parse(localStorage.getItem(WebSocketManager.WEBSOCKET_MANAGER_SETTINGS) || "{}");
-		this.socket = new WebSocket("ws://" + window.location.host + (this.settings["path"] || "/ws"));
+		this.#settings = settings || JSON.parse(localStorage.getItem(WebSocketManager.#WEBSOCKET_MANAGER_SETTINGS) || "{}");
+		this.#socket = new WebSocket("wss://" + window.location.host + (this.#settings["path"] || "/ws"));
 		this.#initReader();
 	}
 
@@ -22,15 +22,20 @@ class WebSocketManager {
 		}
 		return null;
 	}
-	public write(data: string): void {
-		if (this.socket.readyState === WebSocket.OPEN) {
-			this.socket.send(data);
+	public write(data: string | Blob | ArrayBufferLike | ArrayBufferView): void {
+		if (this.#socket.readyState === WebSocket.CONNECTING) {
+			console.warn("WebSocket is still connecting. Trying again after a moment...");
+			setTimeout(() => {
+				this.write(data); // Retry sending data after a short delay
+			}, 1_000);
+		} else if (this.#socket.readyState === WebSocket.OPEN) {
+			this.#socket.send(data);
 		} else {
 			console.error("WebSocket is not open. Cannot send data.");
 		}
 	}
 	#initReader(): void {
-		this.socket.onmessage = (event: MessageEvent) => {
+		this.#socket.onmessage = (event: MessageEvent) => {
 			const data: WebSocketManagerEventObject = JSON.parse(event.data);
 			new WebSocketManagerEvents[data.websocketEventType](data).execute();
 		};
